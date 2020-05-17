@@ -1,0 +1,7 @@
+cron:
+- description: purpleair_scraper
+  url: /purpleair
+  schedule: every 1 mins
+- description: valero_scraper
+  url: /valero
+  schedule: every 1 mins
