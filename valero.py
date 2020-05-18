@@ -1,13 +1,14 @@
-import json, logging, requests
+import json, logging, requests, os
 
 from collections import namedtuple
 from datetime import datetime, timedelta
+
 from requests_toolbelt.adapters import appengine
+appengine.monkeypatch()
 
 from uploader import Uploader
 
 Feed = namedtuple('Feed', ['id', 'name', 'lat', 'lon'])
-appengine.monkeypatch()
 
 AUTH = {
             "username": "publicApp",

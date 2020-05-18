@@ -1,19 +1,26 @@
-import json, logging, requests, re
+import json, logging, requests, re, os, pytz
 
 from collections import namedtuple, deque
 from datetime import datetime, timedelta
-from requests_toolbelt.adapters import appengine
 from bs4 import BeautifulSoup
+
+from requests_toolbelt.adapters import appengine
+appengine.monkeypatch()
 
 from uploader import Uploader
 
 Feed = namedtuple('Feed', ['id', 'name', 'lat', 'lon'])
-appengine.monkeypatch()
-
 BASE_URL = "http://www.fenceline.org/rodeo/data.php"
 
-NORTH_LAT_LON = ()
-SOUTH_LAT_LON = ()
+LatLon = namedtuple('LatLon', ['lat', 'lon'])
+NORTH_LAT_LON = LatLon(38.044924, -122.247935)
+SOUTH_LAT_LON = LatLon(38.03855, -122.25653)
+
+NORTH_ID_PREFIX = 'rodeo_north'
+NORTH_NAME = 'Rodeo North Fenceline fenceline_org'
+
+SOUTH_ID_PREFIX = 'rodeo_south'
+SOUTH_NAME = 'Rodeo South Fenceline fenceline_org'
 
 WHITE_SPACE_PATTERN = re.compile(r'(\s)+')
 PUNCTUATION_PATTERN = re.compile(r'[.!?\-,]')
@@ -28,7 +35,7 @@ chemical_id_map = {
 	'Nitrous_Oxide': 'nto_%s_f',
 	'Ammonia': 'nh3_%s_f',
 	'Mercaptan': 'mer_%s_f',
-	'Methane	': 'meth_%s_f',
+	'Methane': 'meth_%s_f',
 	'MTBE': 'mtbe_%s_f',
 	'Benzene': 'ben_%s_u',
 	'Carbon_Disulfide': 'cs2_%s_u',
@@ -36,7 +43,34 @@ chemical_id_map = {
 	'Sulfur_Dioxide': 'so2_%s_u',
 	'Toluene': 'tol_%s_u',
 	'Xylene': 'xyl_%s_u',
+	'Hydrogen_Sulfide': 'h2s_%s_t',
 }
+
+# Sets must be mutually exclusive with each other.
+ftir = set([
+	'1_3_Butadiene',
+	'Carbonyl_Sulfide',
+	'Total_Hydrocarbons',
+	'Carbon_Monoxide',
+	'Ethanol',
+	'Ethylene',
+	'Nitrous_Oxide',
+	'Ammonia',
+	'Mercaptan',
+	'Methane',
+	'MTBE',
+])
+
+uv = set([
+	'Benzene',
+	'Carbon_Disulfide',
+	'Ozone',
+	'Sulfur_Dioxide',
+	'Toluene',
+	'Xylene',
+])
+
+tdl = set(['Hydrogen_Sulfide'])
 
 def get_request_headers():
     return {
@@ -59,6 +93,15 @@ def parse_data_from_row(raw):
 		pass
 	return data
 
+def make_time(date, time):
+	# Example date: 2020_05_17
+	# Example time: 15:14:23
+	date_time_obj = datetime.strptime('{} {}'.format(date, time), '%Y_%m_%d %H:%M:%S')
+	timezone = pytz.timezone('America/Los_Angeles')
+	aware = timezone.localize(date_time_obj)
+	return (aware - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()
+
+
 class FencelineRodeoUploader(Uploader):
 	def fetch_current_data(self):
 		html = requests.get(
@@ -66,17 +109,74 @@ class FencelineRodeoUploader(Uploader):
 					headers=get_request_headers()).content
 		soup = BeautifulSoup(html, 'html.parser')
 		ftir_table = soup(text=re.compile(r'\s*FTIR\sSystems\s*'))[0].find_parent('table')
-		ftir_date = get_row_data(ftir_table, 'Date')
-		ftir_time = get_row_data(ftir_table, 'Time')
+		_, ftir_south_date, ftir_north_date = get_row_data(ftir_table, 'Date')
+		_, ftir_south_time, ftir_north_time = get_row_data(ftir_table, 'Time')
 		uv_table = soup(text=re.compile(r'\s*UV\sSystems\s*'))[0].find_parent('table')
-		uv_date = get_row_data(uv_table, 'Date')
-		uv_time = get_row_data(uv_table, 'Time')
+		_, uv_south_date, uv_north_date = get_row_data(uv_table, 'Date')
+		_, uv_south_time, uv_north_time = get_row_data(uv_table, 'Time')
+		tdl_table = soup(text=re.compile(r'\s*TDL\sSystems\s*'))[0].find_parent('table')
+		_, tdl_south_date, tdl_north_date = get_row_data(tdl_table, 'Date')
+		_, tdl_south_time, tdl_north_time = get_row_data(tdl_table, 'Time')
 		north_data = {
 			key: parse_data_from_row(soup.select('#' + (value % 'n'))[0].get_text()) for key, value in chemical_id_map.iteritems()
 		}
 		south_data = {
 			key: parse_data_from_row(soup.select('#' + (value % 's'))[0].get_text()) for key, value in chemical_id_map.iteritems()
 		}
-		print(north_data, south_data)
+
+		# Upload North Fenceline data:
+		north_id = self.makeId(NORTH_ID_PREFIX, NORTH_LAT_LON.lat, NORTH_LAT_LON.lon)
+		north_feed = Feed(north_id, NORTH_NAME, NORTH_LAT_LON.lat, NORTH_LAT_LON.lon)
+		# Upload FTIR North:
+		ftir_north_data = {
+			"FTIR_" + key: value for key, value in north_data.iteritems() if key in ftir and value != 'ND'
+		}
+		if ftir_north_data:
+			ftir_north_data['time'] = make_time(ftir_north_date, ftir_north_time)
+			yield self.getFeed(*north_feed), self.makeEsdrUpload(ftir_north_data), ftir_north_data
+
+		# Upload FTIR North:
+		uv_north_data = {
+			"UV_" + key: value for key, value in north_data.iteritems() if key in uv and value != 'ND'
+		}
+		if uv_north_data:
+			uv_north_data['time'] = make_time(uv_north_date, uv_north_time)
+			yield self.getFeed(*north_feed), self.makeEsdrUpload(uv_north_data), uv_north_data
+
+		# Upload TDL North:
+		tdl_north_data = {
+			"TDL_" + key: value for key, value in north_data.iteritems() if key in tdl and value != 'ND'
+		}
+		if tdl_north_data:
+			tdl_north_data['time'] = make_time(tdl_north_date, tdl_north_time)
+			yield self.getFeed(*north_feed), self.makeEsdrUpload(tdl_north_data), tdl_north_data
+
+		# Upload South Fenceline data:
+		south_id = self.makeId(SOUTH_ID_PREFIX, SOUTH_LAT_LON.lat, SOUTH_LAT_LON.lon)
+		south_feed = Feed(south_id, SOUTH_NAME, SOUTH_LAT_LON.lat, SOUTH_LAT_LON.lon)
+		
+		# Upload FTIR South:
+		ftir_south_data = {
+			"FTIR_" + key: value for key, value in south_data.iteritems() if key in ftir and value != 'ND'
+		}
+		if ftir_south_data:
+			ftir_south_data['time'] = make_time(ftir_south_date, ftir_south_time)
+			yield self.getFeed(*north_feed), self.makeEsdrUpload(ftir_north_data), ftir_north_data
+
+		# Upload UV South:
+		uv_south_data = {
+			"UV_" + key: value for key, value in south_data.iteritems() if key in uv and value != 'ND'
+		}
+		if uv_south_data:
+			uv_south_data['time'] = make_time(uv_south_date, uv_south_time)
+			yield self.getFeed(*south_feed), self.makeEsdrUpload(uv_south_data), uv_south_data
+
+		# Upload TDL South:
+		tdl_south_data = {
+			"TDL_" + key: value for key, value in south_data.iteritems() if key in tdl and value != 'ND'
+		}
+		if tdl_south_data:
+			tdl_south_data['time'] = make_time(tdl_south_date, tdl_south_time)
+			yield self.getFeed(*south_feed), self.makeEsdrUpload(tdl_south_data), tdl_south_data
 
 		

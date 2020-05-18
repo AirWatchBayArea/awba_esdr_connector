@@ -1,9 +1,8 @@
-import datetime, json, requests, logging
+import datetime, json, requests, logging, os
 
 from uploader import Uploader
 
 from requests_toolbelt.adapters import appengine
-
 appengine.monkeypatch()
 
 class PurpleAirUploader(Uploader):

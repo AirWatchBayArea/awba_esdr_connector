@@ -28,11 +28,11 @@ class Connector(webapp2.RequestHandler):
 		setattr(self, 'uploader', self.UPLOADER(self.esdr, product))
 
 	def scrape(self):
-		yield {'name': 'aFeed', 'id': 0}, {'esdr_data':1}, {'raw_data': 1}
+		raise NotImplementedError()
 
 	def upload(self, feed, data):
 		logging.info('Uploading to %s (%s)' % (feed['id'], feed['name']))
-		if os.getenv('SERVER_SOFTWARE', '').startswith('Google App Engine/'):
-		  # Production
+		if os.getenv('SERVER_SOFTWARE', '').startswith('Google App Engine/') and self.request.headers.get('X-AppEngine-Cron'):
+		  # Production and App Engine cron job:
 		  self.esdr.upload(feed, data)
 		  logging.info('Uploaded to %s (%s)' % (feed['id'], feed['name']))
