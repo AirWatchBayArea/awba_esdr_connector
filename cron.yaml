@@ -5,3 +5,6 @@ cron:
 - description: valero_scraper
   url: /valero
   schedule: every 1 mins
+- description: fenclinerodeo_scraper
+  url: /fenclinerodeo
+  schedule: every 1 mins
