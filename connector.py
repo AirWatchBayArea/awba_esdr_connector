@@ -28,7 +28,7 @@ class Connector(webapp2.RequestHandler):
 		setattr(self, 'uploader', self.UPLOADER(self.esdr, product))
 
 	def scrape(self):
-		yield {'name': 'aFeed', 'id': 0}, {'esdr_data':1}, {'raw_data': 1}
+		raise NotImplementedError()
 
 	def upload(self, feed, data):
 		logging.info('Uploading to %s (%s)' % (feed['id'], feed['name']))

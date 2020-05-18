@@ -61,10 +61,19 @@ class FencelineRodeoConnector(Connector):
 	PRODUCT_NAME = 'AWBA_FencelineRodeo'
 
 	def scrape(self):
-		yield self.uploader.fetch_current_data()
+		for data in self.uploader.fetch_current_data():
+			if data:
+				yield data
 
 app = webapp2.WSGIApplication([
 	('/purpleair', PurpleAirConnector),
 	('/valero', ValeroConnector),
 	('/fencelinerodeo', FencelineRodeoConnector),
 ], debug=True)
+
+def main():
+    from paste import httpserver
+    httpserver.serve(app, host='127.0.0.1', port='8080')
+
+if __name__ == '__main__':
+    main()
