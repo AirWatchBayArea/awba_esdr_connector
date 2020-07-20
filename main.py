@@ -18,6 +18,7 @@ from datetime import datetime
 from connector import Connector
 from purpleair import PurpleAirUploader
 from valero import ValeroUploader
+from fenceline_martinez import FencelineMartinezUploader
 from fenceline_rodeo import FencelineRodeoUploader
 
 
@@ -65,8 +66,16 @@ class FencelineRodeoConnector(Connector):
 			if data:
 				yield data
 
+class FencelineMartinezConnector(Connector):
+	UPLOADER = FencelineMartinezUploader
+	PRODUCT_NAME = 'AWBA_FencelineMartinez'
+
+	def scrape(self):
+		yield self.uploader.fetch_current_data()
+
 app = webapp2.WSGIApplication([
 	('/purpleair', PurpleAirConnector),
 	('/valero', ValeroConnector),
 	('/fencelinerodeo', FencelineRodeoConnector),
+	('/fencelinemartinez', FencelineMartinezConnector),
 ], debug=True)
