@@ -50,8 +50,8 @@ class PurpleAirVallejoConnector(PurpleAirConnector):
 	BAY_AREA_PURPLE_AIR = {
 		4491, 38429,
 		6578, 23597,
-		5127, 5127,
-		1870, 2480
+		5127, 1870,
+		2480,
 	}
 
 class ValeroConnector(Connector):
