@@ -24,13 +24,7 @@ from fenceline_rodeo import FencelineRodeoUploader
 class PurpleAirConnector(Connector):
 	UPLOADER = PurpleAirUploader
 	PRODUCT_NAME = 'AWBA_PurpleAir'
-	BAY_AREA_PURPLE_AIR = {
-		3765, 20187,
-		11988, 11990,
-		20207, 23933,
-		3939, 23933,
-		22451, 20053,
-	}
+	BAY_AREA_PURPLE_AIR = set()
 
 	def scrape(self):
 		bay_area_purple_air_devices = iter(self.uploader.get_purple_air_device(device_id) for device_id in self.BAY_AREA_PURPLE_AIR)
@@ -41,6 +35,24 @@ class PurpleAirConnector(Connector):
 					yield feed_data
 				# Uncomment to upload all data between two dates.
 				# yield self.uploader.upload_thingspeak_data(device, datetime(2019, 5, 1), datetime(2019, 5, 3))
+
+# Split up Benicia and Vallejo end points for better parallelism.
+class PurpleAirBeniciaConnector(PurpleAirConnector):
+	BAY_AREA_PURPLE_AIR = {
+		3765, 20187,
+		11988, 11990,
+		20207, 23933,
+		3939, 23933,
+		22451, 20053,
+	}
+
+class PurpleAirVallejoConnector(PurpleAirConnector):
+	BAY_AREA_PURPLE_AIR = {
+		4491, 38429,
+		6578, 23597,
+		5127, 5127,
+		1870, 2480
+	}
 
 class ValeroConnector(Connector):
 	UPLOADER = ValeroUploader
@@ -67,6 +79,8 @@ class FencelineRodeoConnector(Connector):
 
 app = webapp2.WSGIApplication([
 	('/purpleair', PurpleAirConnector),
+	('/purpleair/benicia', PurpleAirBeniciaConnector),
+	('/purpleair/vallejo', PurpleAirVallejoConnector),
 	('/valero', ValeroConnector),
 	('/fencelinerodeo', FencelineRodeoConnector),
 ], debug=True)
