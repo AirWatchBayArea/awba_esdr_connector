@@ -1,0 +1,7 @@
+requests==2.12.4
+webapp2==2.5.2
+pytz==2019.3
+beautifulsoup4==4.9.1
+protobuf==3.12.2
+requests_toolbelt==0.9.1
+WebTest==2.0.35
