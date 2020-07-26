@@ -1,3 +1,5 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 import json, logging, requests, re, os, pytz
 
 from collections import namedtuple, deque
@@ -108,6 +110,28 @@ class FencelineRodeoUploader(Uploader):
 					get_request_url(),
 					headers=get_request_headers()).content
 		soup = BeautifulSoup(html, 'html.parser')
+		# Featch Weather Data (North Fenceline)
+		weather_table = soup(text=re.compile(r'\s*Weather\sConditions\s*'))[0].find_parent('table')
+		_, weather_date = get_row_data(weather_table, 'Date')
+		_, weather_time = get_row_data(weather_table, 'Time')
+		weather_datetime = make_time(weather_date, weather_time)
+		temperature = parse_data_from_row(weather_table.find(id='temp').get_text())
+		humidity = parse_data_from_row(weather_table.find(id='hum').get_text())
+		dew_point = parse_data_from_row(weather_table.find(id='dew').get_text())
+		wind_speed = parse_data_from_row(weather_table.find(id='wspeed').get_text())
+		wind_direction_text = weather_table.find(id='wdir').get_text()
+		wind_direction_search = re.search(r'([0-9]+)', wind_direction_text)
+		wind_direction = parse_data_from_row(wind_direction_search.group(1)) if wind_direction_search else None
+		north_weather_data = {
+			'time': weather_datetime,
+			'Temperature_F': temperature,
+			'Humidity': humidity,
+			'Dew_Point_F': dew_point,
+			'Wind_Speed_MPH': wind_speed,
+			'Wind_Direction_degrees': wind_direction
+		}
+
+		# Fetch FTIR Data
 		ftir_table = soup(text=re.compile(r'\s*FTIR\sSystems\s*'))[0].find_parent('table')
 		_, ftir_south_date, ftir_north_date = get_row_data(ftir_table, 'Date')
 		_, ftir_south_time, ftir_north_time = get_row_data(ftir_table, 'Time')
@@ -127,6 +151,11 @@ class FencelineRodeoUploader(Uploader):
 		# Upload North Fenceline data:
 		north_id = self.makeId(NORTH_ID_PREFIX, NORTH_LAT_LON.lat, NORTH_LAT_LON.lon)
 		north_feed = Feed(north_id, NORTH_NAME, NORTH_LAT_LON.lat, NORTH_LAT_LON.lon)
+		
+		# Upload Weather Data:
+		if north_weather_data:
+			yield self.getFeed(*north_feed), self.makeEsdrUpload(north_weather_data), north_weather_data
+		
 		# Upload FTIR North:
 		ftir_north_data = {
 			"FTIR_" + key: value for key, value in north_data.iteritems() if key in ftir and value != 'ND'
@@ -178,5 +207,4 @@ class FencelineRodeoUploader(Uploader):
 		if tdl_south_data:
 			tdl_south_data['time'] = make_time(tdl_south_date, tdl_south_time)
 			yield self.getFeed(*south_feed), self.makeEsdrUpload(tdl_south_data), tdl_south_data
-
 		

@@ -36,3 +36,5 @@ class Connector(webapp2.RequestHandler):
 		  # Production and App Engine cron job:
 		  self.esdr.upload(feed, data)
 		  logging.info('Uploaded to %s (%s)' % (feed['id'], feed['name']))
+		else:
+		  logging.info('... Skipped upload in dev mode.')

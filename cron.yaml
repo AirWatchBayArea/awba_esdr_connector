@@ -1,6 +1,9 @@
 cron:
-- description: purpleair_scraper
-  url: /purpleair
+- description: purpleair_benicia_scraper
+  url: /purpleair/benicia
+  schedule: every 1 mins
+- description: purpleair_vallejo_scraper
+  url: /purpleair/vallejo
   schedule: every 1 mins
 - description: valero_scraper
   url: /valero
