@@ -9,5 +9,8 @@ cron:
   url: /valero
   schedule: every 1 mins
 - description: fencelinerodeo_scraper
-  url: /fencelinerodeo
+  url: /fenceline/rodeo
+  schedule: every 1 mins
+- description: fencelinemartinez_scraper
+  url: /fenceline/martinez
   schedule: every 1 mins

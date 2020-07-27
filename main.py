@@ -83,13 +83,15 @@ class FencelineMartinezConnector(Connector):
 	PRODUCT_NAME = 'AWBA_FencelineMartinez'
 
 	def scrape(self):
-		yield self.uploader.fetch_current_data()
+		for data in self.uploader.fetch_current_data():
+			if data:
+				yield data
 
 app = webapp2.WSGIApplication([
 	('/purpleair', PurpleAirConnector),
 	('/purpleair/benicia', PurpleAirBeniciaConnector),
 	('/purpleair/vallejo', PurpleAirVallejoConnector),
 	('/valero', ValeroConnector),
-	('/fencelinerodeo', FencelineRodeoConnector),
-	('/fencelinemartinez', FencelineMartinezConnector),
+	('/fenceline/rodeo', FencelineRodeoConnector),
+	('/fenceline/martinez', FencelineMartinezConnector),
 ], debug=True)
