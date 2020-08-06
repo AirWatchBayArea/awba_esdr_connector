@@ -8,6 +8,9 @@ cron:
 - description: valero_scraper
   url: /valero
   schedule: every 1 mins
+- description: chevron_scraper
+  url: /chevron
+  schedule: every 1 mins
 - description: fencelinerodeo_scraper
   url: /fenceline/rodeo
   schedule: every 1 mins
