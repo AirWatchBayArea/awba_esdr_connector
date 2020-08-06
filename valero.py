@@ -56,7 +56,7 @@ def get_wind_request_url():
     return BASE_URL + "/WindData/filterAsJson"
 
 def sanitize_date(date):
-    return (date - timedelta( minutes=date.minute % 5,
+    return (date - timedelta(minutes=date.minute % 5,
                              seconds=date.second,
                              microseconds=date.microsecond)).strftime('%Y-%m-%dT%H:%M:%S')
 
@@ -169,8 +169,11 @@ class ValeroUploader(Uploader):
                 # Convert to miles per hour.
                 windSpeed *= 2.237;
                 data['Wind_Speed_MPH'] = windSpeed
+            elif device['unitName'] == 'mph':
+                data['Wind_Speed_MPH'] = windSpeed
             data['Wind_Direction'] = device['windDirection']
-        feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MS'])
+        # Capture the max wind speed in a 5 minute sliding-window interval.
+        feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MPH'])
         feed, time = feedtime
         yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
 

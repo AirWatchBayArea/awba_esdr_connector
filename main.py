@@ -15,12 +15,12 @@ import webapp2
 
 from datetime import datetime
 
+from chevron import ChevronUploader
 from connector import Connector
-from purpleair import PurpleAirUploader
-from valero import ValeroUploader
 from fenceline_martinez import FencelineMartinezUploader
 from fenceline_rodeo import FencelineRodeoUploader
-
+from purpleair import PurpleAirUploader
+from valero import ValeroUploader
 
 class PurpleAirConnector(Connector):
 	UPLOADER = PurpleAirUploader
@@ -69,6 +69,20 @@ class ValeroConnector(Connector):
 			if feed_data:
 				yield feed_data
 
+class ChevronConnector(Connector):
+	UPLOADER = ChevronUploader
+	PRODUCT_NAME = 'AWBA_Chevron'
+
+	def scrape(self):
+		devices = self.uploader.fetch_devices()
+		for feed_data in self.uploader.parse_devices(devices):
+			if feed_data:
+				yield feed_data
+		devices = self.uploader.fetch_wind_devices()
+		for feed_data in self.uploader.parse_wind_devices(devices):
+			if feed_data:
+				yield feed_data
+
 class FencelineRodeoConnector(Connector):
 	UPLOADER = FencelineRodeoUploader
 	PRODUCT_NAME = 'AWBA_FencelineRodeo'
@@ -88,10 +102,11 @@ class FencelineMartinezConnector(Connector):
 				yield data
 
 app = webapp2.WSGIApplication([
+	('/chevron', ChevronConnector),
+	('/fenceline/martinez', FencelineMartinezConnector),
+	('/fenceline/rodeo', FencelineRodeoConnector),
 	('/purpleair', PurpleAirConnector),
 	('/purpleair/benicia', PurpleAirBeniciaConnector),
 	('/purpleair/vallejo', PurpleAirVallejoConnector),
 	('/valero', ValeroConnector),
-	('/fenceline/rodeo', FencelineRodeoConnector),
-	('/fenceline/martinez', FencelineMartinezConnector),
 ], debug=True)

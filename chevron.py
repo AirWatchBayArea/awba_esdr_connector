@@ -56,12 +56,12 @@ def get_wind_request_url():
     return BASE_URL + "/WindData/filterAsJson"
 
 def sanitize_date(date):
-    return (date - timedelta( minutes=date.minute % 5,
+    return (date - timedelta(minutes=date.minute % 5,
                              seconds=date.second,
                              microseconds=date.microsecond)).strftime('%Y-%m-%dT%H:%M:%S')
 
-def get_current_date():
-    selected_date = datetime.utcnow()
+def get_dates(ago=timedelta(seconds=0)):
+    selected_date = datetime.utcnow() - ago;
     start_date = selected_date - timedelta(minutes=3)
     end_date = selected_date + timedelta(minutes=3)
     return tuple(sanitize_date(date) for date in [selected_date, start_date, end_date])
@@ -72,13 +72,13 @@ class ChevronUploader(Uploader):
         super(ChevronUploader, self).__init__(esdr, product)
         self.token = login()
 
-    def build_request_body(self, token):
-        selected_date_time, start_date_time, end_date_time = get_current_date()
+    def build_request_body(self, token, parameters):
+        selected_date_time, start_date_time, end_date_time = get_dates()
         return {
             'input' : json.dumps({
                 "dataStreams": [],
-                "siteIds": [46,47,48, 118,124,125],
-                "parameters":[154],
+                "siteIds": [46,47,48, 145, 118,124,125],
+                "parameters": parameters,
                 "durationId": 2,
                 "aggregateId": 0,
                 "publicDataOnly": False,
@@ -95,12 +95,13 @@ class ChevronUploader(Uploader):
         }
 
     def build_wind_request_body(self, token):
-        selected_date_time, start_date_time, end_date_time = get_current_date()
+        # Must offset by 1 minute to get data.
+        selected_date_time, start_date_time, end_date_time = get_dates(ago=timedelta(minutes=1))
         return {
             'input' : json.dumps(
                 {
                     "dataStreams": [],
-                    "siteIds": [46],
+                    "siteIds": [46, 47, 48, 145],
                     "parameters": [289,24],
                     "durationId": 2,
                     "aggregateId": 0,
@@ -108,10 +109,9 @@ class ChevronUploader(Uploader):
                     "publicDataOnly": False,
                     "primaryDataOnly": False,
                     "validDataOnly": True,
-                    "selectedDateTime":"2020-07-27T07:55:00.000Z","endDateTime":"2020-07-27T07:45:00","startDateTime":"2020-07-26T07:45:00",
-                    # "selectedDateTime": selected_date_time,#"2020-07-27T07:10:00.000Z",
-                    # "startDateTime": start_date_time,#"2020-07-26T07:10:00",
-                    # "endDateTime": end_date_time,#"2020-07-27T07:10:00",
+                    "selectedDateTime": selected_date_time,
+                    "endDateTime": end_date_time,
+                    "startDateTime": start_date_time,
                     "isUtc": True,
                     "overwriteValue": 0,
                     "overwriteValueOpCodes": [74,76],
@@ -123,17 +123,26 @@ class ChevronUploader(Uploader):
 
     @handle_auth
     def fetch_devices(self):
-        response = requests.post(
-            get_request_url(),
-            data=self.build_request_body(self.token),
-            headers=get_request_headers()
-        )
-        response.raise_for_status()
-        if 'error' in response and response['error']:
-            raise Exception(response['messages'][0])
-        if 'isFailure' in response and response['isFailure']:
-            raise Exception('The server responded with a failure.')
-        return response.json()['data']
+        params_list = [
+            [2, 9, 40, 154, 155, 156, 158, 159, 176, 206, 209],
+            [216, 279, 280, 281, 282, 283, 284, 285, 286, 287],
+            [288, 302, 304, 310]
+        ]
+        data = []
+        for params in params_list:
+            response = requests.post(
+                get_request_url(),
+                data=self.build_request_body(self.token, params),
+                headers=get_request_headers()
+            )
+            response.raise_for_status()
+            if 'error' in response and response['error']:
+                raise Exception(response['messages'][0])
+            if 'isFailure' in response and response['isFailure']:
+                raise Exception('The server responded with a failure.')
+            data += response.json()['data']
+        return data
+        
 
     @handle_auth
     def fetch_wind_devices(self):
@@ -174,11 +183,13 @@ class ChevronUploader(Uploader):
                 # Convert to miles per hour.
                 windSpeed *= 2.237;
                 data['Wind_Speed_MPH'] = windSpeed
+            elif device['unitName'] == 'mph':
+                data['Wind_Speed_MPH'] = windSpeed
             data['Wind_Direction'] = device['windDirection']
-        feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MS'])
+        # Capture the max wind speed in a 5 minute sliding-window interval.
+        feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MPH'])
         feed, time = feedtime
-        print(feed, data)
-        # yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
+        yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
 
     def parse_devices(self, devices):
         raw_data_cache = {}
@@ -208,5 +219,4 @@ class ChevronUploader(Uploader):
                 data[param_name] = value
         for feedtime, data in feed_time_cache.iteritems():
             feed, time = feedtime
-            print(feed, data)
-            # yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
+            yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
