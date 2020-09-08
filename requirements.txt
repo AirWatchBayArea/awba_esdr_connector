@@ -1,4 +1,4 @@
-requests==2.12.4
+requests==2.20.0
 webapp2==2.5.2
 pytz==2019.3
 beautifulsoup4==4.9.1
