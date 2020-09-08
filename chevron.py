@@ -1,4 +1,4 @@
-import json, logging, requests, os
+import json, logging, requests, os, time
 
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -40,6 +40,7 @@ def handle_auth(func):
             return result
         except:
             args[0].token = login();
+            time.sleep(3)
             return func(*args, **kwargs)
     return wrapper
 
@@ -60,10 +61,10 @@ def sanitize_date(date):
                              seconds=date.second,
                              microseconds=date.microsecond)).strftime('%Y-%m-%dT%H:%M:%S')
 
-def get_dates(ago=timedelta(seconds=0)):
+def get_dates(ago=timedelta(seconds=0), delta=timedelta(minutes=3)):
     selected_date = datetime.utcnow() - ago;
-    start_date = selected_date - timedelta(minutes=3)
-    end_date = selected_date + timedelta(minutes=3)
+    start_date = selected_date - delta
+    end_date = selected_date + delta
     return tuple(sanitize_date(date) for date in [selected_date, start_date, end_date])
 
 class ChevronUploader(Uploader):
@@ -72,7 +73,7 @@ class ChevronUploader(Uploader):
         super(ChevronUploader, self).__init__(esdr, product)
         self.token = login()
 
-    def build_request_body(self, token, parameters):
+    def build_data_request_body(self, token, parameters):
         selected_date_time, start_date_time, end_date_time = get_dates()
         return {
             'input' : json.dumps({
@@ -94,45 +95,101 @@ class ChevronUploader(Uploader):
             "fillMissingPoints": False,
         }
 
-    def build_wind_request_body(self, token):
-        # Must offset by 1 minute to get data.
-        selected_date_time, start_date_time, end_date_time = get_dates(ago=timedelta(minutes=1))
+    @handle_auth
+    def fetch_devices(self):
+        params_list = [
+            [2, 9, 40, 154, 155],
+            [156, 158, 159, 176],
+            [206, 209, 216, 279],
+            [280, 281, 282, 283],
+            [284, 285, 286, 287],
+            [288, 302, 304, 310]
+        ]
+        data = []
+        for params in params_list:
+            time.sleep(3)
+            try:
+                response = requests.post(
+                    get_request_url(),
+                    data=self.build_data_request_body(self.token, params),
+                    headers=get_request_headers()
+                )
+                response.raise_for_status()
+                if 'error' in response and response['error']:
+                    raise Exception(response['messages'][0])
+                if 'isFailure' in response and response['isFailure']:
+                    raise Exception('The server responded with a failure.')
+                if 'data' not in response.json():
+                    raise Exception('The server omitted data field.')
+            except Exception as e:
+                logging.warning('Failure for params: %s' % params)
+                logging.warning(e)
+                continue
+            data += response.json()['data']
+        return data
+
+    def parse_devices(self, devices):
+        raw_data_cache = {}
+        feed_time_cache = {}
+        for device in devices:
+            try:
+                lat = float(device['latitude'])
+                lon = float(device['longitude'])
+            except:
+                # Ignore if no parsable lat and lon
+                pass
+            id = self.makeId(device['siteId'], lat, lon)
+            name = device['siteName']
+            time = (datetime.strptime(device['utc'], "%Y-%m-%d %H:%M:%S") - datetime(1970,1,1)).total_seconds()
+            param_name = device['parameterName'].replace('-', '_')
+            qc_feed = Feed(id + '_qc', name + '_qc', lat, lon)
+            raw_data_cache.setdefault((qc_feed, time), []).append(device)
+            qc_data = feed_time_cache.setdefault((qc_feed, time), {})
+            qc_data['time'] = time
+            qc_data[param_name + '_qcCode'] = device['qcCode']
+            if not device['qcCode'] == 9: # Invalid QC
+                feed = Feed(id, name, lat, lon)
+                raw_data_cache.setdefault((feed, time), []).append(device)
+                data = feed_time_cache.setdefault((feed, time), {})
+                data['time'] = time
+                value = device['value']
+                data[param_name] = value
+        for feedtime, data in feed_time_cache.iteritems():
+            feed, time = feedtime
+            yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
+
+    def build_wind_request_body(self, token, siteIds):
+        selected_date_time, start_date_time, end_date_time = get_dates()
         return {
-            'input' : json.dumps(
-                {
-                    "dataStreams": [],
-                    "siteIds": [46, 47, 48, 145],
-                    "parameters": [289,24],
-                    "durationId": 2,
-                    "aggregateId": 0,
-                    "pocs": [1],
-                    "publicDataOnly": False,
-                    "primaryDataOnly": False,
-                    "validDataOnly": True,
-                    "selectedDateTime": selected_date_time,
-                    "endDateTime": end_date_time,
-                    "startDateTime": start_date_time,
-                    "isUtc": True,
-                    "overwriteValue": 0,
-                    "overwriteValueOpCodes": [74,76],
-                    "isMulticolorSeries": True
-                }),
+            'input' : json.dumps({
+                "dataStreams": [],
+                "siteIds": siteIds,
+                "parameters": [289,24],
+                "durationId": 2,
+                "aggregateId": 0,
+                "pocs": [1],
+                "publicDataOnly": False,
+                "primaryDataOnly": False,
+                "validDataOnly": False,
+                "selectedDateTime": selected_date_time,
+                "endDateTime": end_date_time,
+                "startDateTime": start_date_time,
+                "isUtc": True,
+                "overwriteValue": 0,
+                "overwriteValueOpCodes": [74,76],
+                "isMulticolorSeries": True
+            }),
             "token": token,
             "type" : "windDataJson",
         }
 
     @handle_auth
-    def fetch_devices(self):
-        params_list = [
-            [2, 9, 40, 154, 155, 156, 158, 159, 176, 206, 209],
-            [216, 279, 280, 281, 282, 283, 284, 285, 286, 287],
-            [288, 302, 304, 310]
-        ]
-        data = []
-        for params in params_list:
+    def fetch_wind_devices(self):
+        siteIds = [46, 47, 48, 145]
+        try:
             response = requests.post(
-                get_request_url(),
-                data=self.build_request_body(self.token, params),
+                get_wind_request_url(),
+                data=self.build_wind_request_body(self.token, siteIds),
                 headers=get_request_headers()
             )
             response.raise_for_status()
@@ -140,22 +197,11 @@ class ChevronUploader(Uploader):
                 raise Exception(response['messages'][0])
             if 'isFailure' in response and response['isFailure']:
                 raise Exception('The server responded with a failure.')
-            data += response.json()['data']
-        return data
-        
-
-    @handle_auth
-    def fetch_wind_devices(self):
-        response = requests.post(
-            get_wind_request_url(),
-            data=self.build_wind_request_body(self.token),
-            headers=get_request_headers()
-        )
-        response.raise_for_status()
-        if 'error' in response and response['error']:
-            raise Exception(response['messages'][0])
-        if 'isFailure' in response and response['isFailure']:
-            raise Exception('The server responded with a failure.')
+            if 'windData' not in response.json():
+                raise Exception('The server omitted windData field.')
+        except Exception as e:
+            logging.warning(e)
+            return []
         return response.json()['windData']
 
     def parse_wind_devices(self, devices):
@@ -186,37 +232,8 @@ class ChevronUploader(Uploader):
             elif device['unitName'] == 'mph':
                 data['Wind_Speed_MPH'] = windSpeed
             data['Wind_Direction'] = device['windDirection']
-        # Capture the max wind speed in a 5 minute sliding-window interval.
-        feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MPH'])
-        feed, time = feedtime
-        yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
-
-    def parse_devices(self, devices):
-        raw_data_cache = {}
-        feed_time_cache = {}
-        for device in devices:
-            try:
-                lat = float(device['latitude'])
-                lon = float(device['longitude'])
-            except:
-                # Ignore if no parsable lat and lon
-                pass
-            id = self.makeId(device['siteId'], lat, lon)
-            name = device['siteName']
-            time = (datetime.strptime(device['utc'], "%Y-%m-%d %H:%M:%S") - datetime(1970,1,1)).total_seconds()
-            param_name = device['parameterName'].replace('-', '_')
-            qc_feed = Feed(id + '_qc', name + '_qc', lat, lon)
-            raw_data_cache.setdefault((qc_feed, time), []).append(device)
-            qc_data = feed_time_cache.setdefault((qc_feed, time), {})
-            qc_data['time'] = time
-            qc_data[param_name + '_qcCode'] = device['qcCode']
-            if not device['qcCode'] == 9: # Invalid QC
-                feed = Feed(id, name, lat, lon)
-                raw_data_cache.setdefault((feed, time), []).append(device)
-                data = feed_time_cache.setdefault((feed, time), {})
-                data['time'] = time
-                value = device['value']
-                data[param_name] = value
-        for feedtime, data in feed_time_cache.iteritems():
+        if feed_time_cache:
+            # Capture the max wind speed in a 5 minute sliding-window interval.
+            feedtime, data = max(feed_time_cache.iteritems(), key=lambda x: x[1]['Wind_Speed_MPH'])
             feed, time = feedtime
             yield self.getFeed(*feed), self.makeEsdrUpload(data), raw_data_cache[(feed, time)]
