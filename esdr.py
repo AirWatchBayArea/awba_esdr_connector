@@ -95,7 +95,7 @@ class Esdr:
                 if attempt > 1:
                     logging.info('ESDR.api: Attempt %d succeeded' % attempt)
                 break
-            except requests.Timeout:
+            except (requests.Timeout, requests.ConnectionError):
                 logging.info('ESDR.api: Timeout during attempt %d.' % attempt)
                 if attempt == maxRetries:
                     logging.info('ESDR.api: No more retries, raising exception')
