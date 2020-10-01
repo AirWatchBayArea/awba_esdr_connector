@@ -190,7 +190,7 @@ class FencelineRodeoUploader(Uploader):
 		}
 		if ftir_south_data:
 			ftir_south_data['time'] = make_time(ftir_south_date, ftir_south_time)
-			yield self.getFeed(*north_feed), self.makeEsdrUpload(ftir_north_data), ftir_north_data
+			yield self.getFeed(*south_feed), self.makeEsdrUpload(ftir_south_data), ftir_south_data
 
 		# Upload UV South:
 		uv_south_data = {
