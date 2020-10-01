@@ -1,4 +1,4 @@
-import json, os, random, re, requests, unicodedata, urllib, sys
+import json, os, random, re, requests, unicodedata, urllib, sys, time
 import logging
 from requests_toolbelt.adapters import appengine
 
@@ -95,13 +95,15 @@ class Esdr:
                 if attempt > 1:
                     logging.info('ESDR.api: Attempt %d succeeded' % attempt)
                 break
-            except (requests.Timeout, requests.ConnectionError):
+            except (requests.Timeout, requests.ConnectionError, requests.HTTPError):
                 logging.info('ESDR.api: Timeout during attempt %d.' % attempt)
                 if attempt == maxRetries:
                     logging.info('ESDR.api: No more retries, raising exception')
                     raise
                 else:
                     logging.info('ESDR.api: Retrying.')
+                # Sleep with some fuzzing.
+                time.sleep(2 - random.random());
         
         r.raise_for_status()
         return r.json()

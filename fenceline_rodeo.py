@@ -164,7 +164,7 @@ class FencelineRodeoUploader(Uploader):
 			ftir_north_data['time'] = make_time(ftir_north_date, ftir_north_time)
 			yield self.getFeed(*north_feed), self.makeEsdrUpload(ftir_north_data), ftir_north_data
 
-		# Upload FTIR North:
+		# Upload UV North:
 		uv_north_data = {
 			"UV_" + key: value for key, value in north_data.iteritems() if key in uv and value != 'ND'
 		}
