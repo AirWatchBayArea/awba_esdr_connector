@@ -128,7 +128,7 @@ class ValeroUploader(Uploader):
             raise Exception(response['messages'][0])
         if 'isFailure' in response and response['isFailure']:
             raise Exception('The server responded with a failure.')
-        return response.json()['data']
+        return response.json().get('data', [])
 
     @handle_auth
     def fetch_wind_devices(self):
@@ -142,7 +142,7 @@ class ValeroUploader(Uploader):
             raise Exception(response['messages'][0])
         if 'isFailure' in response and response['isFailure']:
             raise Exception('The server responded with a failure.')
-        return response.json()['windData']
+        return response.json().get('windData', [])
 
     def parse_wind_devices(self, devices):
         raw_data_cache = {}

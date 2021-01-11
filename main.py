@@ -40,11 +40,18 @@ class PurpleAirConnector(Connector):
 # Split up Benicia and Vallejo end points for better parallelism.
 class PurpleAirBeniciaConnector(PurpleAirConnector):
 	BAY_AREA_PURPLE_AIR = {
-		3765, 20187,
-		11988, 11990,
-		20207, 23933,
-		3939, 23933,
-		22451, 20053,
+		  3765, 3939,
+		  3964, 11988,
+		  11990, 20187,
+		  22451, 23933,
+		  27237, 38503,
+		  39655, 39665,
+		  39667, 39717,
+		  39745, 43787,
+		  45905, 54335,
+		  65217, 69607,
+		  71763, 79147,
+		  92121
 	}
 
 class PurpleAirVallejoConnector(PurpleAirConnector):
